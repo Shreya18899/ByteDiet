@@ -1,5 +1,4 @@
-**ByteDiet
-**
+**ByteDiet**
 
 We are creating an app to measure nutrients in food utilizing Amazon AWS services such as S3, RDS, Lambda functions etc.
 
