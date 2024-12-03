@@ -40,7 +40,7 @@ class ImageAsset:
   bucketkey: str
   height: int  
   width: int  
-  is_compressed: bool
+  is_resized: bool
 
 class BucketItem:
   Key: str

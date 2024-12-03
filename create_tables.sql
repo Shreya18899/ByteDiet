@@ -8,7 +8,7 @@ CREATE TABLE image_assets (
    bucketkey                 VARCHAR(128) NOT NULL,  -- Random, unique name in bucket
    height                    INT NOT NULL,
    width                     INT NOT NULL,
-   is_compressed             BOOLEAN NOT NULL DEFAULT FALSE,
+   is_resized             BOOLEAN NOT NULL DEFAULT FALSE,
    PRIMARY KEY (assetid),
    UNIQUE (bucketkey)
 );

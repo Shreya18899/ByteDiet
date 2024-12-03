@@ -91,7 +91,7 @@ exports.post_image = async (req, res) => {
       });
     }
 
-    let insert_sql = 'INSERT INTO image_assets (assetname, bucketkey, height, width, is_compressed) VALUES (?, ?, ?, ?, ?)';
+    let insert_sql = 'INSERT INTO image_assets (assetname, bucketkey, height, width, is_resized) VALUES (?, ?, ?, ?, ?)';
     let result = await query_database(photoapp_db, insert_sql, [assetname, s3_key, height, width, true]);
 
     if (result.affectedRows === 1) {
