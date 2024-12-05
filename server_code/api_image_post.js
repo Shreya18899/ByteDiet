@@ -1,9 +1,6 @@
-//
-// app.post('/image/:userid', async (req, res) => {...});
-//
-// Uploads an image to the bucket and updates the database,
-// returning the asset id assigned to this image.
-//
+const sharp = require('sharp'); // Install with npm install sharp
+
+
 const photoapp_db = require('./photoapp_db.js')
 const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const { photoapp_s3, s3_bucket_name, s3_region_name } = require('./photoapp_s3.js');
@@ -49,7 +46,23 @@ exports.post_image = async (req, res) => {
 
     const { assetname, data, width, height } = req.body;  // data => JS object
     const bucket_folder = "image_assets";
-    console.log(data)
+    const image_bytes = Buffer.from(data, 'base64');
+    let objectUrl = ""; 
+    // console.log(data)
+
+    // Get image dimensions using sharp
+    let imageMetadata;
+    try {
+      imageMetadata = await sharp(image_bytes).metadata();
+      console.log("Original Image Dimensions:", imageMetadata.width, imageMetadata.height);
+    } catch (err) {
+      console.log("Error extracting image metadata:", err);
+      return res.status(400).json({
+        "message": "Invalid image data",
+        "assetid": -1
+      });
+    }
+
     const parsedWidth = parseInt(width, 10);
     const parsedHeight = parseInt(height, 10);
     
@@ -60,34 +73,45 @@ exports.post_image = async (req, res) => {
       });
     }
 
-    const image_bytes = Buffer.from(data, 'base64');
+    // Resize image using sharp
+    try {
+      resizedImageBytes = await sharp(image_bytes)
+        .resize(parsedWidth, parsedHeight) // Resize to specified dimensions
+        .toBuffer(); // Convert the resized image back to a buffer
+      console.log("Image resized successfully.");
+      resizedImageMetadata = await sharp(resizedImageBytes).metadata();
+      console.log("Resized Image Dimensions:", resizedImageMetadata.width, resizedImageMetadata.height);
+    } catch (err) {
+      console.log("Error resizing image:", err);
+      return res.status(500).json({
+        "message": "Failed to resize image",
+        "assetid": -1,
+      });
+    }
+
+
     const uuidd = uuid.v4();
     const s3_key = `${bucket_folder}/${uuidd}.jpg`;
     
     const s3_params = {
       Bucket: s3_bucket_name,
       Key: s3_key,
-      Body: image_bytes,
+      Body: resizedImageBytes,
       ContentType: "image/jpg",
       ACL: "public-read"
     };
 
-    /* TODO
-    -save the original size value, width,height
-    -resize it to the input width and height
-    -response with new/original size, width, and height, and s3_link 
-    */
 
     try {
       await photoapp_s3.send(new PutObjectCommand(s3_params));
       console.log("Image uploaded successfully to S3.");
-      const objectUrl = `https://${s3_bucket_name}.s3.${s3_region_name}.amazonaws.com/${s3_key}`;
+      objectUrl = `https://${s3_bucket_name}.s3.${s3_region_name}.amazonaws.com/${s3_key}`;
       console.log("Object URL:", objectUrl);
     } catch (err) {
       console.log("Error uploading to S3:", err);
       return res.status(500).json({
         "message": "Failed to upload image to S3",
-        "assetid": -1
+        "assetid": -1,
       });
     }
 
@@ -98,7 +122,12 @@ exports.post_image = async (req, res) => {
       const asset_id = result.insertId;
       return res.json({
         "message": "success",
-        "assetid": asset_id
+        "assetid": asset_id,
+        "objectUrl":objectUrl,
+        "originalImageWidth":imageMetadata.width,
+        "originalImageHeight":imageMetadata.height,
+        "resizedImageWidth":resizedImageMetadata.width,
+        "resizedImageHeight":resizedImageMetadata.height
       });
     } else {
       return res.status(400).json({

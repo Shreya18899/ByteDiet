@@ -1,2 +1,4 @@
 .DS_Store
 server_code/server_config.ini
+.npm
+server_code/node_modules
