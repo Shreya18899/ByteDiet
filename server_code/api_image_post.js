@@ -49,7 +49,7 @@ exports.post_image = async (req, res) => {
 
     const { assetname, data, width, height } = req.body;  // data => JS object
     const bucket_folder = "image_assets";
-
+    console.log(data)
     const parsedWidth = parseInt(width, 10);
     const parsedHeight = parseInt(height, 10);
     
