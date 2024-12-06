@@ -1,0 +1,7 @@
+CREATE TABLE pdf_assets (
+    pdfId INT AUTO_INCREMENT PRIMARY KEY,
+    pdfName VARCHAR(255) NOT NULL,
+    pdfKey VARCHAR(255) NOT NULL,
+    pageCount INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
