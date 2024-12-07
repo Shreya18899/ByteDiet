@@ -17,3 +17,4 @@ RUN adduser -S user -G users -D
 #
 RUN pip3 install requests
 RUN pip3 install jsons
+RUN pip3 install pdfkit

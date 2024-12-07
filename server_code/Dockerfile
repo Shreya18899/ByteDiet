@@ -22,6 +22,9 @@ RUN apk add --no-cache sqlite
 #
 COPY package*.json .
 RUN npm install
+
+# Copy application code
+COPY . .
 #
 # open port that node.js server will run on, which MUST match
 # the port the 'server.js' code is listening on:

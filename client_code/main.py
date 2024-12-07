@@ -11,8 +11,9 @@
 #   Northwestern University
 #
 
-import requests  # calling web service
-import jsons  # relational-object mapping
+import requests  
+import jsons 
+import json
 
 import uuid
 import pathlib
@@ -21,6 +22,8 @@ import sys
 import os
 import base64
 import time
+import boto3 
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
 from configparser import ConfigParser
 
@@ -86,7 +89,7 @@ def web_service_get(url):
         #
         # we consider this a successful call and response
         #
-        break;
+        break
 
       #
       # failed, try again?
@@ -121,7 +124,7 @@ def web_service_put(url,data):
         #
         # we consider this a successful call and response
         #
-        break;
+        break
 
       #
       # failed, try again?
@@ -158,7 +161,7 @@ def web_service_post(url,data):
         #
         # we consider this a successful call and response
         #
-        break;
+        break
 
       #
       # failed, try again?
@@ -206,6 +209,9 @@ def prompt():
     print(">> Enter a command:")
     print("   0 => end")
     print("   1 => upload")
+    print("   2 => assets")
+    print("   3 => convert image(s) to PDF") 
+    print("   4 => Extract Text from image")
 
     cmd = int(input())
     return cmd
@@ -309,6 +315,248 @@ def upload(baseurl):
 # main
 #
 print('** Welcome to PhotoApp v2 **')
+###################################################################
+#
+# assets
+#
+def assets(baseurl):
+  """
+  Prints out all the assets in the database
+  
+  Parameters
+  ----------
+  baseurl: baseurl for web service
+  
+  Returns
+  -------
+  nothing
+  """
+
+  try:
+    #
+    # call the web service:
+    #
+    api = '/assets'
+    url = baseurl + api
+
+    # res = requests.get(url)
+    res = web_service_get(url)
+
+    #
+    # let's look at what we got back:
+    #
+    if res.status_code != 200:
+      # failed:
+      print("Failed with status code:", res.status_code)
+      print("url: " + url)
+      if res.status_code in [400, 500]:  # we'll have an error message
+        body = res.json()
+        print("Error message:", body["message"])
+      #
+      return
+
+    #
+    # deserialize and extract assets:
+    #
+    body = res.json()
+    #
+    # let's map each dictionary into an Asset object:
+    #
+    assets = []
+    for row in body["data"]:
+      asset = jsons.load(row, ImageAsset)
+      assets.append(asset)
+    #
+    # Now we can think OOP:
+    #
+    for asset in assets:
+      print(asset.assetid)
+      print(" ", asset.assetname)
+      print(" ", asset.bucketkey)
+
+  except Exception as e:
+    logging.error("assets() failed:")
+    logging.error("url: " + url)
+    logging.error(e)
+    return
+
+###################################################################
+#
+# convert_to_pdf
+#
+def convert_to_pdf(baseurl):
+    """
+    Prompts the user for one or more asset IDs, retrieves their corresponding S3 keys,
+    sends a request to the server to convert these images into a PDF, and handles the response.
+    
+    Parameters
+    ----------
+    baseurl: baseurl for web service
+    
+    Returns
+    -------
+    nothing
+    """
+
+    try:
+        print("Enter asset ID(s) to include in PDF (separated by commas)>")
+        asset_ids_input = input()
+        asset_ids = [aid.strip() for aid in asset_ids_input.split(",") if aid.strip().isdigit()]
+        
+        if not asset_ids:
+            print("No valid asset IDs entered.")
+            return
+
+        s3_keys = []
+        for aid in asset_ids:
+            # Assume there's an endpoint to get asset details by asset ID
+            api = f'/image/{aid}'
+            url = baseurl + api
+            res = web_service_get(url)
+            if res is None:
+                print(f"Failed to retrieve details for asset ID {aid}.")
+                continue
+
+            if res.status_code != 200:
+                print(f"Failed to retrieve asset ID {aid} with status code {res.status_code}.")
+                try:
+                    body = res.json()
+                    print("Error message:", body.get("message", "No message provided"))
+                except jsons.JSONDecodeError:
+                    print("No JSON response received.")
+                continue
+
+            body = res.json()
+            bucket_key = body.get("bucketkey")
+            if bucket_key:
+                s3_keys.append(bucket_key)
+                print(f"Asset ID {aid} mapped to S3 key {bucket_key}.")
+            else:
+                print(f"No S3 key found for asset ID {aid}.")
+
+        if not s3_keys:
+            print("No valid S3 keys found for the provided asset IDs.")
+            return
+
+        print("Enter name for the PDF (without extension)>")
+        pdf_name = input().strip()
+        if not pdf_name:
+            print("Invalid PDF name.")
+            return
+
+        # Prepare data for /image-to-pdf endpoint
+        data = {
+            "images": s3_keys,
+            "pdfName": pdf_name
+        }
+
+        api = '/image-to-pdf'
+        url = baseurl + api
+        print("url being accessed is : ", url)
+
+        res = web_service_post(url, data)
+        if res is None:
+            print("Failed to get a response from the server.")
+            return
+
+        if res.status_code != 200:
+            # failed:
+            print("Failed to convert images to PDF with status code:", res.status_code)
+            print("url: " + url)
+            if res.status_code in [400, 500]:  # we'll have an error message
+                try:
+                    body = res.json()
+                    print("Error message:", body.get("message", "No message provided"))
+                except jsons.JSONDecodeError:
+                    print("No JSON response received.")
+            return
+
+        # success, extract PDF URL
+        body = res.json()
+        pdf_url = body.get("pdfUrl")
+        pdf_id = body.get("pdfId")
+        if pdf_url and pdf_id != -1:
+            print("PDF created successfully.")
+            print(f"PDF ID: {pdf_id}")
+            print(f"PDF URL: {pdf_url}")
+        else:
+            print("Failed to create PDF. Server did not return a valid PDF URL.")
+
+    except Exception as e:
+        logging.error("convert_to_pdf() failed:")
+        logging.error(e)
+        return
+
+
+def extract_text_from_image(baseurl):
+    """
+    Prompts the user for an asset id, sends a request to the server to extract text from the image,
+    and downloads the extracted text from S3.
+    
+    Parameters
+    ----------
+    baseurl: baseurl for web service
+    
+    Returns
+    -------
+    nothing
+    """
+    try:
+        print("Enter asset ID to extract text from>")
+        asset_id_input = input().strip()
+
+        if not asset_id_input.isdigit():
+            print("Invalid asset ID. It should be a number.")
+            return
+
+        asset_id = int(asset_id_input)
+
+        # Prepare data for /extract-text-from-pdf endpoint
+        data = {
+            "assetid": asset_id
+        }
+
+        api = '/extract-text-from-image'
+        url = baseurl + api
+        print(f"Requesting text extraction from asset ID {asset_id}...")
+
+        res = web_service_post(url, data)
+
+
+        if res is None:
+            print("Failed to get a response from the server.")
+            return
+
+        if res.status_code == 404:
+                    print(f"Asset ID {asset_id} not found. Please enter a valid asset id")
+                    return
+
+        if res.status_code != 200:
+            # failed:
+            print("Failed to extract text from image with status code:", res.status_code)
+            print("url: " + url)
+            if res.status_code in [400, 500]:  
+                try:
+                    body = res.json()
+                    print("Error message:", body.get("message", "No message provided"))
+                except json.JSONDecodeError:
+                    print("No JSON response received.")
+            return
+        else:
+           print("Job Completed. Check s3 folder textract_jobs for results")
+    except Exception as e:
+        logging.error("extract_text_from_image() failed:")
+        logging.error(e)
+        return
+
+###################################################################
+#
+# extract_text_from_image
+#
+#########################################################################
+# main
+#
+print('** Welcome to the Nutrition App. We look forward to help you with any specifications you might need on your food intake**')
 print()
 
 # eliminate traceback so we just get error message:
@@ -369,10 +617,18 @@ if lastchar == "/":
 cmd = prompt()
 
 while cmd != 0:
-  #
-
   if cmd == 1:
+    # resizing function
     upload(baseurl)
+  elif cmd == 2:
+    # list the assets
+    assets(baseurl)
+  elif cmd == 3:
+    # convert image to pdf
+    convert_to_pdf(baseurl)
+  elif cmd == 4:
+     # extract text from image
+     extract_text_from_image(baseurl)
   else:
     print("** Unknown command, try again...")
   #

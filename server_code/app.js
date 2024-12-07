@@ -1,10 +1,14 @@
 //
+// Server side code to call the the function which will upload images to s3
+
+
 // Express js (and node.js) web service that interacts with 
 // AWS S3 and RDS to provide clients data for building a 
 // simple photo application for photo storage and viewing.
 //
 // Authors:
-//  YOUR NAME
+//  Chanipa Sangphet
+//  Shreya Singh
 //  Prof. Joe Hummel (initial template)
 //  Northwestern University
 //
@@ -26,12 +30,16 @@
 const express = require('express');
 const app = express();
 const config = require('./config.js');
+const winston = require('winston');
+const bodyParser = require('body-parser');
+
 
 const photoapp_db = require('./photoapp_db.js')
 const { HeadBucketCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { photoapp_s3, s3_bucket_name, s3_region_name } = require('./photoapp_s3.js');
 
 // support larger image uploads/downloads:
+const extractTextRoutes = require('./extract_text_from_image.js'); 
 app.use(express.json({ strict: false, limit: "50mb" }));
 
 var startTime;
@@ -78,3 +86,15 @@ app.get('/', (req, res) => {
 let upload = require('./api_image_post.js');
 app.post('/image', upload.post_image);
 
+let assets=require('./api_assets.js');
+app.get('/assets', assets.get_assets);  
+
+let asset_id=require('./api_get_assetid.js');
+app.get('/image/:assetid', asset_id.get_image_assetid);  
+
+let imageToPdf = require('./api_image_to_pdf.js');
+// Add the route for image-to-PDF conversion
+app.post('/image-to-pdf', imageToPdf.image_to_pdf);
+
+let process_image = require('./extract_text_from_image.js')
+app.post('/extract-text-from-image', process_image.fetch_and_process_image);
